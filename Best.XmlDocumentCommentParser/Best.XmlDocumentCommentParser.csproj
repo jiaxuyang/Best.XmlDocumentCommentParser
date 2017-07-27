@@ -1,0 +1,46 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>Best xml comment document parse utility for .NET Core and .NET 4.6+</Description>
+    <Copyright>Copyright (C) 2016 BEST Logistics. All rights reserved.</Copyright>
+    <AssemblyTitle>Best.XmlDocumentCommentParser lib</AssemblyTitle>
+    <VersionPrefix>2.0.0</VersionPrefix>
+    <Authors>BEST Logistics., Shi Jiyong</Authors>
+    <TargetFrameworks>net46</TargetFrameworks>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <AssemblyName>Best.XmlDocumentCommentParser</AssemblyName>
+    <PackageId>Best.XmlDocumentCommentParser</PackageId>
+    <PackageTags>Best;XML;Document</PackageTags>
+    <PackageReleaseNotes>Alpha for .NET Core; if you aren't doing .NET Core, you probably don't want this</PackageReleaseNotes>
+    <PackageIconUrl>https://raw.githubusercontent.com/JiyongShi/Best.EntLib/master/icon.png</PackageIconUrl>
+    <PackageProjectUrl>https://github.com/JiyongShi/Best.XmlDocumentCommentParser</PackageProjectUrl>
+    <PackageLicenseUrl>https://github.com/JiyongShi/Best.XmlDocumentCommentParser/master/LICENSE</PackageLicenseUrl>
+    <RepositoryType>git</RepositoryType>
+    <RepositoryUrl>https://github.com/JiyongShi/Best.XmlDocumentCommentParser.git</RepositoryUrl>
+    <DebugType>full</DebugType>
+    <DebugSymbols>True</DebugSymbols>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove="Documentation.Raw.xsl" />
+    <None Remove="DocumentationToHtml.xsl" />
+    <None Remove="DocumentationToJson.Method.xsl" />
+    <None Remove="DocumentationToJson.Type.xsl" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Documentation.Raw.xsl" />
+    <EmbeddedResource Include="DocumentationToHtml.xsl" />
+    <EmbeddedResource Include="DocumentationToJson.Method.xsl" />
+    <EmbeddedResource Include="DocumentationToJson.Type.xsl" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="10.0.2" />
+    <PackageReference Include="System.Xml.XPath" Version="4.3.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="System.Configuration" />
+  </ItemGroup>
+</Project>
