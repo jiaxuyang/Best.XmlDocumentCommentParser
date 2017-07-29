@@ -12,6 +12,7 @@ using System.Configuration;
 using System.IO;
 using System.Reflection;
 using System.Xml.Linq;
+using Mono.Cecil;
 
 
 namespace Jolt
@@ -46,6 +47,9 @@ namespace Jolt
         public XmlDocCommentReader(Assembly assembly)
             : this(assembly, CreateDefaultReadPolicy) { }
 
+        public XmlDocCommentReader(AssemblyDefinition assemblyDefinition)
+            : this(assemblyDefinition, CreateDefaultReadPolicy) { }
+
         /// <summary>
         /// Creates a new instance of the <see cref="XmlDocCommentReader"/> class
         /// by searching for a doc comments file that corresponds to the given assembly.
@@ -66,6 +70,9 @@ namespace Jolt
         /// </remarks>
         public XmlDocCommentReader(Assembly assembly, CreateReadPolicyDelegate createReadPolicy)
             : this(assembly, ConfigurationManager.GetSection("XmlDocCommentsReader") as XmlDocCommentReaderSettings, createReadPolicy) { }
+
+        public XmlDocCommentReader(AssemblyDefinition assemblyDefinition, CreateReadPolicyDelegate createReadPolicy)
+            : this(assemblyDefinition, ConfigurationManager.GetSection("XmlDocCommentsReader") as XmlDocCommentReaderSettings, createReadPolicy) { }
 
         /// <summary>
         /// Creates a new instance of the <see cref="XmlDocCommentReader"/> class
@@ -125,6 +132,13 @@ namespace Jolt
             _docCommentsReadPolicy = createReadPolicy(_docCommentsFullPath);
         }
 
+        internal XmlDocCommentReader(AssemblyDefinition assemblyDefinition, XmlDocCommentReaderSettings settings, CreateReadPolicyDelegate createReadPolicy)
+        {
+            _settings = settings ?? XmlDocCommentReaderSettings.Default;
+            _docCommentsFullPath = ResolveDocCommentsLocation(assemblyDefinition, _settings.DirectoryNames);
+            _docCommentsReadPolicy = createReadPolicy(_docCommentsFullPath);
+        }
+
         /// <summary>
         /// Creates a new instance of the <see cref="XmlDocCommentReader"/> class
         /// with a given path to the XML doc comments, and configures the reader
@@ -179,6 +193,11 @@ namespace Jolt
         public XElement GetComments(Type type)
         {
             return _docCommentsReadPolicy.ReadMember(Convert.ToXmlDocCommentMember(type));
+        }
+
+        public XElement GetComments(TypeReference typeReference)
+        {
+            return _docCommentsReadPolicy.ReadMember(Convert.ToXmlDocCommentMember(typeReference));
         }
 
         /// <summary>
@@ -266,6 +285,11 @@ namespace Jolt
             return _docCommentsReadPolicy.ReadMember(Convert.ToXmlDocCommentMember(method));
         }
 
+        public XElement GetComments(MethodReference methodReference)
+        {
+            return _docCommentsReadPolicy.ReadMember(Convert.ToXmlDocCommentMember(methodReference));
+        }
+
         #endregion
 
         #region public properties -----------------------------------------------------------------
@@ -326,6 +350,25 @@ namespace Jolt
         private static string ResolveDocCommentsLocation(Assembly assembly, XmlDocCommentDirectoryElementCollection directories)
         {
             string assemblyFileName = assembly.GetName().Name;
+            string xmlDocCommentsFilename = String.Concat(assemblyFileName, XmlFileExtension);
+
+            foreach (XmlDocCommentDirectoryElement directory in directories)
+            {
+                string xmlDocCommentsFullPath = Path.GetFullPath(Path.Combine(directory.Name, xmlDocCommentsFilename));
+                if (File.Exists(xmlDocCommentsFullPath))
+                {
+                    return xmlDocCommentsFullPath;
+                }
+            }
+
+            throw new FileNotFoundException(
+                String.Format("Could not locate an XML doc comments file in the configured search list, for the assembly named '{0}'.", assemblyFileName),
+                assemblyFileName);
+        }
+
+        private static string ResolveDocCommentsLocation(AssemblyDefinition assemblyDefinition, XmlDocCommentDirectoryElementCollection directories)
+        {
+            string assemblyFileName = assemblyDefinition.Name.Name;
             string xmlDocCommentsFilename = String.Concat(assemblyFileName, XmlFileExtension);
 
             foreach (XmlDocCommentDirectoryElement directory in directories)

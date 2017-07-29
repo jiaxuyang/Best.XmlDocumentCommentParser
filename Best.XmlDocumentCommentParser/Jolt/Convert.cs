@@ -9,8 +9,10 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using System.Text;
+using Mono.Cecil;
 
 namespace Jolt
 {
@@ -36,7 +38,9 @@ namespace Jolt
                 { typeof(PropertyInfo), "P:" },
                 { typeof(FieldInfo), "F:" },
                 { typeof(MethodInfo), methodPrefix },
-                { typeof(ConstructorInfo), methodPrefix }
+                { typeof(ConstructorInfo), methodPrefix },
+                { typeof(TypeReference), "T:" },
+                { typeof(MethodReference), methodPrefix }
             };
         }
 
@@ -61,6 +65,14 @@ namespace Jolt
             StringBuilder builder = new StringBuilder();
             return AppendXDCFullTypeNameTo(builder, type)
                 .Insert(0, XDCMemberPrefixes[typeof(Type)])
+                .ToString();
+        }
+
+        public static string ToXmlDocCommentMember(TypeReference typeReference)
+        {
+            StringBuilder builder = new StringBuilder();
+            return AppendXDCFullTypeNameTo(builder, typeReference)
+                .Insert(0, XDCMemberPrefixes[typeof(TypeReference)])
                 .ToString();
         }
 
@@ -161,6 +173,19 @@ namespace Jolt
             return builder.ToString();
         }
 
+        public static string ToXmlDocCommentMember(MethodReference method)
+        {
+            StringBuilder builder = ToXmlDocCommentMember<MethodReference>(method, method.Parameters);
+
+            if (Array.BinarySearch(ConversionOperatorNames, method.Name) >= 0)
+            {
+                builder.Append('~');
+                AppendXDCParameterTypesTo(builder, new[] { method.ReturnType });
+            }
+
+            return builder.ToString();
+        }
+
         /// <summary>
         /// Retrieves the type of each <see cref="System.Reflection.ParameterInfo"/> object
         /// from the given array.
@@ -177,6 +202,11 @@ namespace Jolt
         public static Type[] ToParameterTypes(ParameterInfo[] parameters)
         {
             return ToParameterTypes(parameters, Type.EmptyTypes, Type.EmptyTypes);
+        }
+
+        public static TypeReference[] ToParameterTypes(Mono.Collections.Generic.Collection<ParameterDefinition> parameters)
+        {
+            return ToParameterTypes(parameters, new TypeReference[0], new TypeReference[0]);
         }
 
         /// <summary>
@@ -257,6 +287,14 @@ namespace Jolt
             return Array.ConvertAll(parameters, methodParam => ToMethodSignatureType(methodParam.ParameterType, genericTypeArguments, genericMethodArguments));
         }
 
+        internal static TypeReference[] ToParameterTypes(
+            Mono.Collections.Generic.Collection<ParameterDefinition> parameters, TypeReference[] genericTypeArguments,
+            TypeReference[] genericMethodArguments)
+        {
+            return parameters.Select(methodParam => ToMethodSignatureType(methodParam.ParameterType,
+                genericTypeArguments, genericMethodArguments)).ToArray();
+        }
+
         /// <summary>
         /// Converts a given type to one that represents a defined type
         /// that participates in an external method signature.  Refers to
@@ -293,6 +331,28 @@ namespace Jolt
             return parameterType;
         }
 
+        internal static TypeReference ToMethodSignatureType(TypeReference parameterType, TypeReference[] genericTypeArguments, TypeReference[] genericMethodArguments)
+        {
+            if (parameterType.IsGenericParameter)
+            {
+                var genericParameter = parameterType as GenericParameter;
+                if (genericParameter != null)
+                {
+                    if (genericParameter.DeclaringMethod != null && genericMethodArguments.Length > 0)
+                    {
+                        return genericMethodArguments[genericParameter.Position];
+                    }
+
+                    if (genericTypeArguments.Length > 0)
+                    {
+                        return genericTypeArguments[genericParameter.Position];
+                    }
+                }
+            }
+
+            return parameterType;
+        }
+
         #endregion
 
         #region private methods -------------------------------------------------------------------
@@ -319,6 +379,13 @@ namespace Jolt
         /// </returns>
         private static StringBuilder ToXmlDocCommentMember<TMember>(TMember member, ParameterInfo[] memberParameters)
             where TMember : MemberInfo
+        {
+            int dummy;
+            return ToXmlDocCommentMember(member, memberParameters, out dummy);
+        }
+
+        private static StringBuilder ToXmlDocCommentMember<TMember>(TMember member, Mono.Collections.Generic.Collection<ParameterDefinition> memberParameters)
+            where TMember : MemberReference
         {
             int dummy;
             return ToXmlDocCommentMember(member, memberParameters, out dummy);
@@ -371,6 +438,27 @@ namespace Jolt
             return builder;
         }
 
+        private static StringBuilder ToXmlDocCommentMember<TMember>(TMember member, Mono.Collections.Generic.Collection<ParameterDefinition> memberParameters, out int namePosition)
+            where TMember : MemberReference
+        {
+            StringBuilder builder = new StringBuilder();
+            AppendXDCFullTypeNameTo(builder, member.DeclaringType)
+                .Insert(0, XDCMemberPrefixes[typeof(TMember)])
+                .Append('.');
+
+            namePosition = builder.Length;
+            builder.Append(member.Name);
+
+            if (memberParameters.Count > 0)
+            {
+                builder.Append('(');
+                AppendXDCParameterTypesTo(builder, ToParameterTypes(memberParameters))
+                    .Append(')');
+            }
+
+            return builder;
+        }
+
         /// <summary>
         /// Appends the XML doc comment representation of the full name of the given
         /// <see cref="System.Type"/> to a given <see cref="System.Text.StringBuilder"/>.
@@ -395,6 +483,12 @@ namespace Jolt
         {
             if (type.IsGenericType) { type = type.GetGenericTypeDefinition(); }
             return AppendNormalizedXDCTypeNameTo(builder, type);
+        }
+
+        private static StringBuilder AppendXDCFullTypeNameTo(StringBuilder builder, TypeReference typeReference)
+        {
+            if (typeReference.IsGenericInstance) { typeReference = typeReference.GetElementType(); }
+            return AppendNormalizedXDCTypeNameTo(builder, typeReference);
         }
 
         /// <summary>
@@ -430,6 +524,19 @@ namespace Jolt
             return builder.Append(typeNameBuilder.ToString());
         }
 
+        private static StringBuilder AppendXDCTypeNameTo(StringBuilder builder, TypeReference type)
+        {
+            StringBuilder typeNameBuilder = new StringBuilder();
+            AppendNormalizedXDCTypeNameTo(typeNameBuilder, type);
+
+            if (type.IsGenericInstance)
+            {
+                typeNameBuilder.Length = type.FullName.IndexOf('`');
+            }
+
+            return builder.Append(typeNameBuilder);
+        }
+
         /// <summary>
         /// Appends the XML doc comment representation of the normalized name of the given
         /// <see cref="System.Type"/> to a given <see cref="System.Text.StringBuilder"/>.
@@ -455,6 +562,13 @@ namespace Jolt
             return type.IsNested ?
                 builder.Append(type.FullName.Replace('+', '.')) :
                 builder.Append(type.FullName);
+        }
+
+        private static StringBuilder AppendNormalizedXDCTypeNameTo(StringBuilder builder, TypeReference typeReference)
+        {
+            return typeReference.IsNested ?
+                builder.Append(typeReference.FullName.Replace('/', '.')) :
+                builder.Append(typeReference.FullName);
         }
 
         /// <summary>
@@ -492,6 +606,40 @@ namespace Jolt
                     }
 
                     builder.Append(parameterTypes[i].GenericParameterPosition);
+                }
+                else
+                {
+                    AppendXDCTypeNameTo(builder, parameterTypes[i]);
+                }
+
+                builder.Append(parameterModifier).Append(',');
+            }
+
+            builder.Length -= 1;
+            return builder;
+        }
+
+        private static StringBuilder AppendXDCParameterTypesTo(StringBuilder builder, TypeReference[] parameterTypes)
+        {
+            for (int i = 0; i < parameterTypes.Length; ++i)
+            {
+                string parameterModifier = ReduceToElementType(ref parameterTypes[i]);
+                if (parameterTypes[i].IsGenericInstance)
+                {
+                    var genericInstanceType = (GenericInstanceType) parameterTypes[i];
+                    AppendXDCTypeNameTo(builder, genericInstanceType.GetElementType()).Append('{');
+                    AppendXDCParameterTypesTo(builder, genericInstanceType.GenericArguments.ToArray()).Append('}');
+                }
+                else if (parameterTypes[i].IsGenericParameter)
+                {
+                    var genericParameter = (GenericParameter) parameterTypes[i];
+                    builder.Append('`');
+                    if (genericParameter.DeclaringMethod != null)
+                    {
+                        builder.Append('`');
+                    }
+
+                    builder.Append(genericParameter.Position);
                 }
                 else
                 {
@@ -548,6 +696,46 @@ namespace Jolt
                            .Insert(0, ArrayElementTypeDimension)
                            .Insert(0, ArrayElementTypeDimension_Delimited, rank - 1)
                            .Insert(0, '[');
+                }
+
+                type = type.GetElementType();
+            }
+
+            while (type.IsPointer)
+            {
+                // ELEMENT_TYPE_PTR
+                builder.Insert(0, '*');
+                type = type.GetElementType();
+            }
+
+            return builder.ToString();
+        }
+
+        private static string ReduceToElementType(ref TypeReference type)
+        {
+            StringBuilder builder = new StringBuilder();
+            while (type.IsByReference)
+            {
+                // ELEMENT_TYPE_BYREF
+                builder.Append('@');
+                type = type.GetElementType();
+            }
+
+            while (type.IsArray)
+            {
+                int rank = ((ArrayType) type).Rank;
+                if (rank == 1)
+                {
+                    // ELEMENT_TYPE_SZARRAY
+                    builder.Insert(0, SZArrayTypeSuffix);
+                }
+                else
+                {
+                    // ELEMENT_TYPE_ARRAY
+                    builder.Insert(0, ']')
+                        .Insert(0, ArrayElementTypeDimension)
+                        .Insert(0, ArrayElementTypeDimension_Delimited, rank - 1)
+                        .Insert(0, '[');
                 }
 
                 type = type.GetElementType();

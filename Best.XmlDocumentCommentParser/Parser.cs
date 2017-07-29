@@ -9,6 +9,7 @@ using System.Xml.Linq;
 using System.Xml.XPath;
 using System.Xml.Xsl;
 using Jolt;
+using Mono.Cecil;
 using Newtonsoft.Json;
 
 namespace Best.XmlDocumentCommentParser
@@ -49,6 +50,24 @@ namespace Best.XmlDocumentCommentParser
         }
 
         /// <summary>
+        /// Get special type's comment info
+        /// </summary>
+        /// <param name="typeReference"></param>
+        /// <returns></returns>
+        public IList<XmlDocumentComment> ParseDocument(TypeReference typeReference)
+        {
+            var xmlElement = GetComments(typeReference);
+            if (xmlElement == null)
+                return null;
+
+            var jsonStr = TransformXmlToJson(xmlElement.ToString(), XslType.Type);
+            if (string.IsNullOrWhiteSpace(jsonStr))
+                return null;
+
+            return JsonConvert.DeserializeObject<IList<XmlDocumentComment>>(jsonStr);
+        }
+
+        /// <summary>
         /// Get special method's comment info
         /// </summary>
         /// <param name="methodInfo"></param>
@@ -56,6 +75,24 @@ namespace Best.XmlDocumentCommentParser
         public XmlDocumentComment ParseDocument(MethodInfo methodInfo)
         {
             var xmlElement = GetComments(methodInfo);
+            if (xmlElement == null)
+                return null;
+
+            var jsonStr = TransformXmlToJson(xmlElement.ToString(), XslType.Method);
+            if (string.IsNullOrWhiteSpace(jsonStr))
+                return null;
+
+            return JsonConvert.DeserializeObject<XmlDocumentComment>(jsonStr);
+        }
+
+        /// <summary>
+        /// Get special method's comment info
+        /// </summary>
+        /// <param name="methodReference"></param>
+        /// <returns></returns>
+        public XmlDocumentComment ParseDocument(MethodReference methodReference)
+        {
+            var xmlElement = GetComments(methodReference);
             if (xmlElement == null)
                 return null;
 
@@ -160,6 +197,25 @@ namespace Best.XmlDocumentCommentParser
         }
 
         /// <summary>
+        /// Get special type's comment XElement, include all field/properties/method...
+        /// </summary>
+        /// <param name="typeReference"></param>
+        /// <returns></returns>
+        private XElement GetComments(TypeReference typeReference)
+        {
+            var assembly = typeReference.Module.Assembly;
+            if (!AssemblyFullnameReaderDictionary.ContainsKey(assembly.FullName))
+                AssemblyFullnameReaderDictionary.TryAdd(assembly.FullName,
+                    new XmlDocCommentReader(assembly));
+
+            var reader = AssemblyFullnameReaderDictionary[assembly.FullName];
+
+            var xmlElement = reader.GetComments(typeReference);
+
+            return xmlElement;
+        }
+
+        /// <summary>
         /// Get special method's comment XElement
         /// </summary>
         /// <param name="methodInfo"></param>
@@ -175,6 +231,21 @@ namespace Best.XmlDocumentCommentParser
 
             var reader = AssemblyFullnameReaderDictionary[assembly.FullName];
             var xmlElement = reader.GetComments(methodInfo);
+
+            return xmlElement;
+        }
+
+        private XElement GetComments(MethodReference methodReference)
+        {
+            if (methodReference.DeclaringType == null)
+                return null;
+
+            var assembly = methodReference.Module.Assembly;
+            if (!AssemblyFullnameReaderDictionary.ContainsKey(assembly.FullName))
+                AssemblyFullnameReaderDictionary.TryAdd(assembly.FullName, new XmlDocCommentReader(assembly));
+
+            var reader = AssemblyFullnameReaderDictionary[assembly.FullName];
+            var xmlElement = reader.GetComments(methodReference);
 
             return xmlElement;
         }
@@ -207,9 +278,9 @@ namespace Best.XmlDocumentCommentParser
             switch (xslType)
             {
                 case XslType.Type:
-                    return "DocumentationToJson.Type.xsl";
+                    return "Best.XmlDocumentCommentParser.DocumentationToJson.Type.xsl";
                 case XslType.Method:
-                    return "DocumentationToJson.Method.xsl";
+                    return "Best.XmlDocumentCommentParser.DocumentationToJson.Method.xsl";
                 default:
                     throw new ArgumentOutOfRangeException("xslType");
             }
