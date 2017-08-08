@@ -529,7 +529,7 @@ namespace Jolt
             StringBuilder typeNameBuilder = new StringBuilder();
             AppendNormalizedXDCTypeNameTo(typeNameBuilder, type);
 
-            if (type.IsGenericInstance)
+            if (type.HasGenericParameters)
             {
                 typeNameBuilder.Length = type.FullName.IndexOf('`');
             }

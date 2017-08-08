@@ -203,7 +203,7 @@ namespace Best.XmlDocumentCommentParser
         /// <returns></returns>
         private XElement GetComments(TypeReference typeReference)
         {
-            var assembly = typeReference.Module.Assembly;
+            var assembly = typeReference.Resolve().Module.Assembly;
             if (!AssemblyFullnameReaderDictionary.ContainsKey(assembly.FullName))
                 AssemblyFullnameReaderDictionary.TryAdd(assembly.FullName,
                     new XmlDocCommentReader(assembly));
@@ -240,7 +240,7 @@ namespace Best.XmlDocumentCommentParser
             if (methodReference.DeclaringType == null)
                 return null;
 
-            var assembly = methodReference.Module.Assembly;
+            var assembly = methodReference.DeclaringType.Resolve().Module.Assembly;
             if (!AssemblyFullnameReaderDictionary.ContainsKey(assembly.FullName))
                 AssemblyFullnameReaderDictionary.TryAdd(assembly.FullName, new XmlDocCommentReader(assembly));
 
